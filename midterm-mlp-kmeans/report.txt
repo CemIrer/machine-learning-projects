@@ -1,0 +1,316 @@
+======================================================================
+  COMP4350 — Midterm Exam Project — Part A Report
+  MLP Neural Network with Backpropagation (implemented from scratch)
+======================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 1: DATASET SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Task         : House price regression (predict Price in TRY)
+  Source files : midtermProject-part1-train.xlsx
+                 midtermProject-part1-test.xlsx
+
+  Input features (3 total):
+    1. Neighborhood         — categorical integer (1, 2, 3, 4)
+    2. Age (Years)          — building age in years (0 – 33)
+    3. Net Square Meters    — usable living area in m² (50 – 245)
+
+  Output (target):
+    Price (TRY)             — house price in Turkish Lira
+
+  Training set size        : 501 records
+  Test set size            : 126 records
+  Price range (train)      :      2,500,000 TRY  (min)
+                                 51,000,000 TRY  (max)
+  Price mean  (train)      :      8,686,066 TRY
+  Price std   (train)      :      5,017,414 TRY
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 2: NORMALISATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Method: Min-Max Scaling — maps all values to the [0, 1] range.
+  Formula applied to each column independently:
+
+           x_norm = (x - x_min) / (x_max - x_min)
+
+  IMPORTANT: normalization statistics (min, max) are computed
+  ONLY on the training set to prevent data leakage from the test set.
+  The same training statistics are then applied to the test set.
+
+  Scaling parameters (computed from training set):
+    Neighborhood             min=   1.00   max=   4.00
+    Age (Years)              min=   0.00   max=  33.00
+    Net Sq.Meters (m2)       min=  50.00   max= 245.00
+    Price (TRY)              min=     2,500,000   max=    51,000,000
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 3: ALGORITHM DESCRIPTION — MLP with Backpropagation
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  A Multi-Layer Perceptron (MLP) is a fully connected feedforward
+  neural network. Information flows in one direction: input → hidden
+  layers → output. Each neuron computes a weighted sum of its inputs,
+  adds a bias, and passes the result through an activation function.
+
+  FORWARD PASS:
+  ─────────────
+  For each layer l (l = 1 … L):
+
+    z^(l) = a^(l-1) · W^(l) + b^(l)     (linear combination)
+    a^(l) = f( z^(l) )                   (activation function)
+
+  where:
+    a^(0) = x   (input vector, normalised)
+    W^(l) = weight matrix for layer l
+    b^(l) = bias vector for layer l
+    f(·)  = tanh for hidden layers, identity for output layer
+
+  tanh activation formula:
+    tanh(z) = (e^z - e^(-z)) / (e^z + e^(-z))
+    tanh'(z) = 1 - tanh(z)²   ← used in backpropagation
+
+  Loss function: Mean Squared Error (MSE) on normalised targets
+    L = (1/n) · Σ (ŷ_i - y_i)²
+
+  BACKPROPAGATION:
+  ─────────────────
+  Starting from the output layer, the error gradient is propagated
+  backwards through the network using the chain rule:
+
+  Output layer delta:    δ^(L) = 2 · (ŷ - y)   [MSE derivative]
+  Hidden layer delta:    δ^(l) = (δ^(l+1) · W^(l+1)ᵀ) ⊙ tanh'(z^(l))
+
+  Gradients:
+    ∂L/∂W^(l) = a^(l-1)ᵀ · δ^(l)
+    ∂L/∂b^(l) = δ^(l)
+
+  SGD WITH MOMENTUM UPDATE RULE:
+  ────────────────────────────────
+  Velocity (momentum) buffers carry a fraction of the previous
+  update direction to smooth oscillations and accelerate learning:
+
+    v_W^(l) ← α · v_W^(l) - η · ∂L/∂W^(l)
+    W^(l)   ← W^(l) + v_W^(l)
+
+  where:  η = learning rate,  α = momentum coefficient
+
+  GRADIENT CLIPPING:
+  ───────────────────
+  If any gradient value exceeds ±4.0, it is clipped to ±4.0.
+  This prevents the exploding gradient problem that can occur
+  in deep networks or when the loss surface is steep.
+
+  LEARNING RATE DECAY:
+  ─────────────────────
+  Every 200 epochs the learning rate is multiplied by 0.92.
+  This allows large steps early in training (fast convergence)
+  and smaller steps later (fine-tuning near the minimum).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 4: ANN PARAMETERS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │  Architecture (layer sizes) : 3 → 20 → 10 → 5 → 1           │
+  │  Total trainable parameters : 351                           │
+  │  Hidden layer activation    : tanh                          │
+  │  Output layer activation    : linear / identity             │
+  │  Initial learning rate (η)  : 0.01                          │
+  │  Momentum coefficient (α)   : 0.88                          │
+  │  Mini-batch size (SGD)      : 16                            │
+  │  LR decay factor            : 0.92 every 200 epochs                │
+  │  Gradient clipping          : ±4.0                          │
+  │  Max training epochs        : 2000                          │
+  │  Early stop threshold       : MSE(norm) < 1e-07              │
+  │  Weight init (Layer 1)      : Glorot uniform                │
+  │  Weight init (Layers 2+)    : He normal                     │
+  │  Training method            : Mini-Batch SGD (batch_size=16)│
+  │  Sample shuffle per epoch   : Yes (random permutation)      │
+  │  Random seed                : 1337                          │
+  └─────────────────────────────────────────────────────────────┘
+
+  Parameter count breakdown:
+    Layer 1 [Hidden 1] : 3×20 weights + 20 biases = 80 params
+    Layer 2 [Hidden 2] : 20×10 weights + 10 biases = 210 params
+    Layer 3 [Hidden 3] : 10×5 weights + 5 biases = 55 params
+    Layer 4 [Output] : 5×1 weights + 1 biases = 6 params
+    ────────────────────────────────────────────────
+    TOTAL PARAMETERS : 351
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 5: TRAINING PROGRESS (MSE on normalised target)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Epoch   | MSE (normalised) | Change from prev
+  --------|------------------|------------------
+       1  |  0.0289562       |  —  (initial)
+     100  |  0.0077563       |  -0.0211999
+     200  |  0.0072226       |  -0.0005337
+     300  |  0.0072359       |  +0.0000133
+     400  |  0.0073243       |  +0.0000884
+     500  |  0.0071311       |  -0.0001932
+     600  |  0.0070477       |  -0.0000834
+     700  |  0.0073031       |  +0.0002554
+     800  |  0.0071175       |  -0.0001856
+     900  |  0.0072932       |  +0.0001757
+    1000  |  0.0070951       |  -0.0001981
+    1100  |  0.0070491       |  -0.0000460
+    1200  |  0.0070721       |  +0.0000230
+
+  Total epochs trained : 2000
+  Initial MSE(norm)    : 0.0289562
+  Final   MSE(norm)    : 0.0068494
+  MSE reduction        : 0.0221068  (76.3%)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 6: PERFORMANCE METRICS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Metric formulas (applied in original TRY scale):
+
+    MAE  = (1/n) · Σ |ŷ_i - y_i|
+           Average absolute prediction error.
+
+    MSE  = (1/n) · Σ (ŷ_i - y_i)²
+           Penalises large errors more heavily than MAE.
+
+    RMSE = √MSE
+           Same unit as the target (TRY); easier to interpret.
+
+    R²   = 1 - SS_res / SS_tot
+           SS_res = Σ(ŷ_i - y_i)²   (residual sum of squares)
+           SS_tot = Σ(y_i - ȳ)²     (total sum of squares)
+           R² = 1 → perfect fit | R² = 0 → predicts the mean
+
+  ┌────────────────────────────────────────────┐
+  │ Train Results (501 samples)                │
+  ├────────────────────────────────────────────┤
+  │  MAE  :       2,559,719.91  TRY        │
+  │  MSE  : 16,337,631,399,686.47  TRY²       │
+  │  RMSE :       4,041,983.60  TRY        │
+  │  R²   :               0.351023             │
+  └────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────┐
+  │ Test Results — Macro Average (126 samples) │
+  ├────────────────────────────────────────────┤
+  │  MAE  :       2,896,305.28  TRY        │
+  │  MSE  : 23,593,864,641,802.21  TRY²       │
+  │  RMSE :       4,857,351.61  TRY        │
+  │  R²   :               0.281508             │
+  └────────────────────────────────────────────┘
+
+  Interpretation:
+    On average, the model's house price predictions are off by
+    approximately 2,896,305 TRY on the test set.
+    The RMSE of 4,857,352 TRY reflects larger individual errors.
+    R² = 0.2815 means the model explains about 28.2% of the
+    variance in house prices on the test set.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 7: SAMPLE PREDICTIONS (first 10 of each set)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Training set predictions:
+     #        Actual (TRY)     Predicted (TRY)       Error (TRY)
+  ──────────────────────────────────────────────────────────────
+     1           8,950,000          10,651,084        +1,701,084
+     2          17,750,000          11,819,525        -5,930,475
+     3          17,250,000          11,683,189        -5,566,811
+     4          16,500,000          10,651,084        -5,848,916
+     5          15,380,000          13,184,866        -2,195,134
+     6          15,000,000          12,102,655        -2,897,345
+     7          13,200,000          10,539,123        -2,660,877
+     8          12,500,000          12,483,820           -16,180
+     9          12,500,000          11,263,711        -1,236,289
+    10          11,500,000           9,092,814        -2,407,186
+
+  Test set predictions:
+     #        Actual (TRY)     Predicted (TRY)       Error (TRY)
+  ──────────────────────────────────────────────────────────────
+     1          13,750,000          10,202,454        -3,547,546
+     2           9,100,000          10,625,315        +1,525,315
+     3           7,600,000           9,643,261        +2,043,261
+     4          11,650,000          10,217,698        -1,432,302
+     5          17,500,000          11,683,189        -5,816,811
+     6           9,750,000          10,651,084          +901,084
+     7           9,250,000          10,539,123        +1,289,123
+     8           8,550,000          12,479,386        +3,929,386
+     9           8,500,000          11,505,309        +3,005,309
+    10           7,350,000           8,690,112        +1,340,112
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 8: FINAL WEIGHTS AND BIASES (values after training)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  These are the learned parameters of the network at the end of
+  training. All values are in normalised space (inputs and targets
+  were scaled to [0,1] before training).
+
+  Layer 1  [Hidden 1]
+  Input  dimension : 3
+  Output dimension : 20
+  Weight matrix W  (3 rows × 20 cols):
+    W[0] = [ -0.2830855  -0.5236222  -0.3167077  -0.0908849  -0.1474737  -0.1422587  -0.2895998  +0.3869524  +0.2927991  -0.5150846  -0.1622403  +0.2466382  -0.2662678  +0.6057747  +0.0559038  +0.1063863  +0.4198248  -0.1524458  -0.0272158  +0.1154201 ]
+    W[1] = [ +0.3273591  -0.2119874  -0.5566746  +0.2631839  +0.1038925  -0.3383628  -0.0369796  -0.3100510  +0.0117204  +0.3109760  -0.3502471  +0.3416282  -0.1390460  -0.1789555  -0.2079652  -0.1964851  +0.2795319  +0.3624065  -0.3238617  -0.3223666 ]
+    W[2] = [ -0.2420198  +0.3322497  -0.4018589  +0.0873378  -0.3195374  +0.1407687  -0.4133214  +0.1580196  +0.0128694  +0.4450494  +0.1381367  +0.1308330  +0.1646280  +0.3319025  -0.4843622  -0.6433478  -0.4032640  +0.4460986  +0.5656756  +0.1590602 ]
+  Bias vector b  = [ -0.0003517  -0.0494266  -0.2233302  -0.1230103  -0.1190765  -0.0616807  -0.0003332  +0.0198903  +0.0566642  -0.3778207  +0.2013694  +0.0361129  +0.0511608  -0.0100266  +0.2713738  +0.1799911  +0.1276825  -0.1877484  +0.1156215  -0.0013727 ]
+
+  Layer 2  [Hidden 2]
+  Input  dimension : 20
+  Output dimension : 10
+  Weight matrix W  (20 rows × 10 cols):
+    W[0] = [ +0.4134394  -0.2842711  -0.3513341  +0.0692689  +0.2953288  +0.0701166  +0.3464601  -0.3288217  +0.0629844  -0.6017494 ]
+    W[1] = [ -0.0399180  -0.4335081  -0.7383836  -0.4010628  -0.0262014  +0.4861208  +0.2578049  +0.2217345  +0.1939652  -0.0323929 ]
+    W[2] = [ +0.1066422  +0.0632633  -0.2871005  -0.7290118  +0.1108980  +0.2447548  -0.5347763  +0.0499807  +0.0081585  +0.1003095 ]
+    W[3] = [ -0.2450528  +0.2575802  -0.6333060  -0.4510443  -0.2980735  -0.0065595  +0.2656430  -0.2786148  +0.0858653  +0.1863382 ]
+    W[4] = [ +0.2754485  -0.1078870  +0.5225200  -0.2333803  +0.0057978  -0.0379248  -0.0599634  -0.6921942  +0.2676387  +0.1015339 ]
+    W[5] = [ -0.1857871  -0.1382633  +0.2291529  -0.3295425  +0.1589252  +0.0092418  -0.4056831  +0.0971511  -0.2037886  -0.2797704 ]
+    W[6] = [ -0.2720608  -0.0771336  -0.1564134  +0.0287536  +0.3432187  +0.4086812  +0.3123174  -0.2120965  +0.2208023  -0.6559554 ]
+    W[7] = [ +0.0823281  -0.0873208  +0.3299745  -0.1250720  +0.1702000  +0.0581691  -0.1003236  +0.0128745  -0.3818216  +0.0145371 ]
+    W[8] = [ +0.3373964  +0.4862145  +0.3049500  +0.0901751  -0.1204821  +0.1467742  -0.0212905  +0.5730035  -0.0615487  -0.0180357 ]
+    W[9] = [ +0.2277993  -0.3504757  -0.2575809  -0.7400277  +0.0284852  -0.7150385  +0.2080884  +0.0164742  +0.1218167  -0.0783159 ]
+    W[10] = [ -0.2964873  +0.1122408  -0.2608948  +0.4324893  +0.7908114  +0.1564943  +0.1041055  +0.2725265  -0.2161980  +0.1153964 ]
+    W[11] = [ +0.0437028  -0.1493040  +0.2059553  +0.2930422  -0.1811652  -0.2963730  -0.0778391  -0.4378174  -0.3230160  +0.3037992 ]
+    W[12] = [ +0.2892113  -0.2302747  +0.0213952  +0.3087364  -0.1273484  +0.5327658  +0.1206873  +0.1434319  +0.3105503  +0.3159523 ]
+    W[13] = [ -0.2722895  +0.2047390  +0.2744101  +0.3045526  -0.3839271  +0.1539825  -0.1043215  +0.3756589  +0.1882904  -0.2043652 ]
+    W[14] = [ +0.0543931  -0.2307646  +0.4318559  +0.7041235  +0.2177478  +0.2399150  -0.0922440  -0.0208229  -0.6701533  -0.0935220 ]
+    W[15] = [ -0.0143611  -0.5989571  +0.2473560  +0.1716663  +0.5109135  -0.7219698  -0.2296025  +0.3953038  +0.0031186  -0.5166874 ]
+    W[16] = [ -0.2285980  +0.1408527  +0.2493976  +0.3193449  +0.2639363  +0.1363040  +0.2638077  +0.2792368  +0.4194858  +0.3429603 ]
+    W[17] = [ +0.1525571  +0.1555001  +0.1412076  -0.4616198  +0.1772573  -0.1777835  -0.0603931  -0.0070469  -0.1475911  +0.2988817 ]
+    W[18] = [ +0.2140693  +0.1342804  +0.0249716  +0.3432050  +0.2277915  +0.2580510  -0.2065378  +0.4932149  +0.3714839  +0.4772920 ]
+    W[19] = [ -0.1806239  +0.3233716  -0.4107015  +0.1218439  +0.0212301  -0.4902699  +0.3131009  -0.4181958  -0.1735309  +0.5228288 ]
+  Bias vector b  = [ +0.0092744  -0.0001493  -0.0207383  +0.1516371  +0.0406688  +0.0663660  +0.0147156  +0.0954519  -0.1378722  +0.0588942 ]
+
+  Layer 3  [Hidden 3]
+  Input  dimension : 10
+  Output dimension : 5
+  Weight matrix W  (10 rows × 5 cols):
+    W[0] = [ +0.2959751  -0.0658199  -0.3343913  -0.4227314  -0.5302104 ]
+    W[1] = [ +0.4063975  +0.0101222  -0.2946585  +0.2133261  -0.3062345 ]
+    W[2] = [ -0.6219098  -0.4688872  +0.4796043  +0.7337629  +0.6072890 ]
+    W[3] = [ -0.3335058  +0.6377801  -0.0674902  -0.3908384  +0.8983616 ]
+    W[4] = [ +0.2589716  +0.0649228  +0.7752867  +0.8226079  +0.4545481 ]
+    W[5] = [ -0.1340519  +0.7318011  +0.2740655  -0.1687990  -0.1074063 ]
+    W[6] = [ -0.1934776  -0.6555320  -0.2935472  -0.4086171  +0.8645355 ]
+    W[7] = [ +0.4616850  +0.6192764  +0.3404967  +0.0239618  -0.1956358 ]
+    W[8] = [ -0.2049609  -0.0157238  -0.6497872  +0.5723789  -0.6044601 ]
+    W[9] = [ -0.2260081  +0.4272290  -0.6939258  -0.8304694  -0.8074854 ]
+  Bias vector b  = [ +0.0372964  +0.0662567  +0.0566177  -0.1407543  -0.0447236 ]
+
+  Layer 4  [Output]
+  Input  dimension : 5
+  Output dimension : 1
+  Weight matrix W  (5 rows × 1 cols):
+    W[0] = [ -0.1239033 ]
+    W[1] = [ -0.3773574 ]
+    W[2] = [ +0.5172602 ]
+    W[3] = [ -0.4898564 ]
+    W[4] = [ -0.5844451 ]
+  Bias vector b  = [ +0.3560417 ]
+
+======================================================================
+  End of Report
+======================================================================

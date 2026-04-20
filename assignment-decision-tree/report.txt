@@ -1,0 +1,200 @@
+============================================================
+COMP4350 - Machine Learning Assignment Report
+Student : [Student Name]
+Course  : COMP4350 - Machine Learning
+Lecturer: Dr. Fevzi Yasin KABABULUT
+Date    : March 2026
+============================================================
+
+
+------------------------------------------------------------
+DATASET
+------------------------------------------------------------
+Training set : X_train.xlsx  —  501 samples, 4 features
+Test set     : X_test.xlsx   —  126 samples
+No missing values in either file.
+
+Features:
+  1. Neighborhood          (categorical, 75+ unique values)
+  2. Price (TRY)           (numeric,  2.5M - 51M)
+  3. Age (Years)           (numeric,  0 - 33)
+  4. Net Square Meters (m2)(numeric,  50 - 245)
+
+Class distribution:
+              Train   Test
+  low          111      21
+  medium       217      53
+  high         125      36
+  very high     48      16
+
+
+============================================================
+PART A — CART DECISION TREE
+============================================================
+
+------------------------------------------------------------
+How it works
+------------------------------------------------------------
+We implemented the CART algorithm from scratch using only
+numpy and pandas. The idea is simple: at every node, we try
+every possible binary split across all features and pick the
+one that creates the purest child nodes (lowest Gini).
+
+For numeric features (Price, Age, m2):
+  We sort the unique values and try midpoints as thresholds.
+  Split condition: value <= threshold goes left, rest goes right.
+
+For categorical feature (Neighborhood):
+  We try one-vs-rest: each unique neighbourhood separately
+  against all others.
+
+The tree keeps growing until each leaf contains only one class.
+No pruning is applied.
+
+------------------------------------------------------------
+Example calculations (Root Node)
+------------------------------------------------------------
+Root node has all 501 training samples.
+Class counts: low=111, medium=217, high=125, very high=48
+
+Gini(root) = 1 - (111/501)^2 - (217/501)^2 - (125/501)^2 - (48/501)^2
+           = 1 - 0.0491 - 0.1876 - 0.0623 - 0.0092
+           = 0.6919
+
+To find the best split, all 4 features are scanned.
+A few candidate thresholds tried for Price (TRY):
+
+  Threshold     Left(n)  Right(n)  Gini_L  Gini_R  Weighted
+  8,525,000      320       181     0.5559  0.6192   0.5788  <- BEST
+  8,650,000      322       179     0.5573  0.6187   0.5792
+  8,720,000      324       177     0.5587  0.6181   0.5797
+  8,920,000      333       168     0.5658  0.6091   0.5803
+
+Best split at root: Price (TRY) <= 8,525,000
+  Weighted Gini = 0.5788 (reduction from 0.6919 to 0.5788)
+
+After this split:
+  Left child  (Price <= 8.53M, n=320):
+    Classes: low=107, medium=182, high=30, very high=1
+    Gini(left) = 1 - (107/320)^2 - (182/320)^2 - (30/320)^2 - (1/320)^2
+               = 0.5559
+
+  Right child (Price > 8.53M, n=181):
+    Classes: low=4, medium=35, high=95, very high=47
+    Gini(right) = 1 - (4/181)^2 - (35/181)^2 - (95/181)^2 - (47/181)^2
+                = 0.6192
+
+The same process repeats recursively at each child node —
+every node scans all features and all thresholds until
+a stopping condition is met (pure node or no valid split).
+
+------------------------------------------------------------
+Tree statistics
+------------------------------------------------------------
+Max depth   : 17 levels
+Total nodes : 225
+Leaf nodes  : 113
+
+------------------------------------------------------------
+Performance Results — Part A
+------------------------------------------------------------
+
+Train Results:
+  Accuracy:              1.0000
+  TP Rate (Recall):      1.0000
+  TN Rate:               1.0000
+  Precision:             1.0000
+  F-Score:               1.0000
+  Total Number of TP:    501
+  Total Number of TN:    1503
+
+  (100% train accuracy is expected for a fully grown tree
+   with no pruning — it memorises all training samples.)
+
+Test Results:
+  Accuracy:              0.7302
+  TP Rate (Recall):      0.7088
+  TN Rate:               0.9003
+  Precision:             0.7408
+  F-Score:               0.7209
+  Total Number of TP:    92
+  Total Number of TN:    344
+
+All metrics are macro-averaged over the 4 classes.
+  TP Rate  = mean(TP_c / (TP_c + FN_c))    per class, then averaged
+  TN Rate  = mean(TN_c / (TN_c + FP_c))    per class, then averaged
+  Precision= mean(TP_c / (TP_c + FP_c))    per class, then averaged
+  F-Score  = mean(2*P_c*R_c / (P_c + R_c)) per class, then averaged
+  Total TP = sum of diagonal in confusion matrix
+  Total TN = sum of TN_c across all 4 classes
+
+
+============================================================
+PART B — RANDOM FOREST
+============================================================
+
+------------------------------------------------------------
+How it works
+------------------------------------------------------------
+We built a Random Forest using the CART tree from Part A.
+Two techniques are combined to create diverse trees:
+
+  1. Random Subspace: each tree uses only 2 randomly chosen
+     features out of 4 (sqrt(4) = 2).
+
+  2. Bootstrap sampling: each tree is trained on a random
+     sample of 501 records drawn with replacement.
+
+We built 25 trees (within the required 15–100 range).
+Final prediction = majority vote among all 25 trees.
+
+Feature subsets per tree:
+  Trees 1,6,7,11,18,19 : Neighborhood + Net Sq.Meters
+  Trees 2,4,5,9,13,16,21,24: Neighborhood + Age
+  Trees 3,8,23         : Neighborhood + Price
+  Trees 10,14,20       : Price + Age
+  Trees 12,22,25       : Sq.Meters + Age
+  Trees 15,17          : Sq.Meters + Price
+
+------------------------------------------------------------
+Performance Results — Part B (Test only)
+------------------------------------------------------------
+
+Test Results (Random Forest — 25 trees):
+  Accuracy:              0.6746
+  TP Rate (Recall):      0.6071
+  TN Rate:               0.8711
+  Precision:             0.7621
+  F-Score:               0.6485
+  Total Number of TP:    85
+  Total Number of TN:    337
+
+
+============================================================
+COMPARISON
+============================================================
+
+                     CART Tree    Random Forest
+                     ---------    -------------
+Test Accuracy         0.7302         0.6746
+Test Recall           0.7088         0.6071
+Test TN Rate          0.9003         0.8711
+Test Precision        0.7408         0.7621
+Test F-Score          0.7209         0.6485
+Total TP (test)       92/126         85/126
+Total TN (test)         344            337
+
+The single CART tree outperforms the Random Forest here.
+With only 4 features, limiting each forest tree to 2 features
+(random subspace) removes important predictors from many trees.
+
+
+============================================================
+FILES SUBMITTED
+============================================================
+  solution.py        — source code (Part A + Part B)
+  decision_tree.png  — tree visualisation (top 4 of 17 levels)
+  report.txt         — this report
+  X_train.xlsx       — training data (provided)
+  X_test.xlsx        — test data (provided)
+============================================================
